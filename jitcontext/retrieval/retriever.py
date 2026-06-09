@@ -2,48 +2,14 @@
 
 Stage 1 (semantic): embed the query, cosine-rank index entries, take top-K.
   Cheap, high recall, no LLM call.
-Stage 2 (pick): from the K candidate *summaries* (never full text), choose which
-  turn ids to actually load. `HeuristicPicker` is offline (keeps the strongest
-  semantic matches, boosts decisions). `LLMPicker` is the real "model picks"
-  step — one small/fast internal sub-call inside the proxy, invisible to the
-  agent. Feed it summaries only and cap K to control cost/latency.
+Stage 2 (pick): from the K candidate *summaries* (never full text), the picker
+  chooses which turn ids to load. Pickers live in `picker.py` (heuristic or LLM).
 """
 from __future__ import annotations
-from dataclasses import dataclass
 
-from ..index.conversation_index import ConversationIndex, IndexEntry
+from ..index.conversation_index import ConversationIndex
 from ..index.embeddings import cosine
-
-
-@dataclass
-class Candidate:
-    entry: IndexEntry
-    score: float
-
-
-class HeuristicPicker:
-    """Offline picker: take top-N by score, give decisions a small boost."""
-
-    def pick(self, query: str, candidates: list[Candidate], max_select: int) -> list[int]:
-        def key(c: Candidate) -> float:
-            return c.score + (0.05 if c.entry.has_decision else 0.0)
-        ranked = sorted(candidates, key=key, reverse=True)
-        return [c.entry.turn_id for c in ranked[:max_select]]
-
-
-class LLMPicker:
-    """Real model-picks step. Plug a small fast model here.
-
-    Prompt it with the query + numbered candidate summaries; parse back the ids
-    it deems necessary. Implement `pick` against your client.
-    """
-
-    def __init__(self, client, model: str) -> None:
-        self.client = client
-        self.model = model
-
-    def pick(self, query: str, candidates: list[Candidate], max_select: int) -> list[int]:  # pragma: no cover
-        raise NotImplementedError("Plug your picker model here.")
+from .candidate import Candidate
 
 
 class HybridRetriever:

@@ -1,13 +1,12 @@
 """Factory + proxy glue.
 
-`build_manager` wires the offline-by-default stack (everything runs with no
-network/keys). Swap any component for an API-backed one without touching the
-manager.
+`build_manager` wires the stack. By default it's fully offline (no keys). Pass
+an `EmbedderSpec` / `PickerSpec` to select real, configurable backends without
+touching the manager or the agent.
 
 `ProxyHandler` is the drop-in integration point: an agent's chat-completions
-request comes in, we rewrite `messages`, and you forward to the real LLM. It's
-transport-agnostic on purpose — wrap it in FastAPI/Flask, or call it directly
-in tests. The agent changes nothing but its base URL.
+request comes in, we rewrite `messages`, and forward to the real LLM. The agent
+changes nothing but its base URL.
 """
 from __future__ import annotations
 from typing import Callable
@@ -15,16 +14,18 @@ from typing import Callable
 from .config import JITConfig
 from .manager import ContextManager, Report
 from .index.conversation_index import HeuristicSummariser
-from .index.embeddings import LocalHashEmbedder
-from .retrieval.retriever import HeuristicPicker
+from .index.embeddings import EmbedderSpec, make_embedder
+from .retrieval.picker import PickerSpec, make_picker
 
 
 def build_manager(config: JITConfig | None = None,
-                  summariser=None, embedder=None, picker=None) -> ContextManager:
+                  embedder_spec: EmbedderSpec | None = None,
+                  picker_spec: PickerSpec | None = None,
+                  summariser=None) -> ContextManager:
     config = config or JITConfig()
-    embedder = embedder or LocalHashEmbedder()
+    embedder = make_embedder(embedder_spec or EmbedderSpec())   # local default
+    picker = make_picker(picker_spec or PickerSpec())           # heuristic default
     summariser = summariser or HeuristicSummariser()
-    picker = picker or HeuristicPicker()
     return ContextManager(config, summariser, embedder, picker)
 
 

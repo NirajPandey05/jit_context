@@ -56,33 +56,58 @@ as conversations lengthen. That gap is the whole thesis.
 > shortlist + decision-flagged turns fixed it. The harness exists to catch
 > exactly this.
 
-## Offline by default, API-ready
+## Offline by default, configurable real backends
 
 Everything runs with no network/keys via deterministic local components, so the
-pipeline is testable in isolation. Swap any one for an API-backed version
-without touching the manager:
+pipeline is testable in isolation. Real backends are **configurable by spec** —
+pass an `EmbedderSpec` / `PickerSpec` to `build_manager`; the manager and agent
+code never change. Clients are injected (no hard SDK imports), so importing the
+package never requires any provider package.
 
-| Component        | Offline default      | Swap in                |
-|------------------|----------------------|------------------------|
-| Embedder         | `LocalHashEmbedder`  | `APIEmbedder`          |
-| Summariser       | `HeuristicSummariser`| `LLMSummariser`        |
-| Picker (model)   | `HeuristicPicker`    | `LLMPicker`            |
-| Upstream LLM     | stub / oracle        | your provider client   |
+| Component      | Offline default       | Configurable backends                          |
+|----------------|-----------------------|------------------------------------------------|
+| Embedder       | `local` (hash BoW)    | `openai` (+ any OpenAI-compatible base_url: OpenRouter/Azure/Together), `cohere`, `voyage` |
+| Picker (model) | `heuristic`           | `llm` with `api=anthropic` or `api=openai`     |
+| Summariser     | `HeuristicSummariser` | `LLMSummariser` (plug a client)                |
+| Upstream LLM   | stub / oracle         | your provider client                           |
+
+```python
+from jitcontext import JITConfig, build_manager
+from jitcontext.index.embeddings import EmbedderSpec
+from jitcontext.retrieval.picker import PickerSpec
+
+manager = build_manager(
+    JITConfig(mode="jit"),
+    embedder_spec=EmbedderSpec(provider="openai",
+                               model="text-embedding-3-small", client=openai_client),
+    picker_spec=PickerSpec(provider="llm", api="anthropic",
+                           model="claude-haiku-4-5-20251001", client=anthropic_client),
+)
+```
+
+Vendors mix freely (e.g. OpenAI embeddings + Claude picker). Vectors are
+L2-normalised in every adapter, so cosine is a plain dot product regardless of
+backend. The LLM picker is fed summaries only, asks for a strict JSON id list,
+parses defensively, and **falls back to the heuristic on any error** so a picker
+failure never crashes the proxy. See `examples/configure_backends.py`.
 
 ## Run
 
 ```bash
-python eval/harness.py     # three-way comparison
-python eval/scaling.py     # token crossover vs length
+python eval/harness.py          # three-way comparison
+python eval/scaling.py          # token crossover vs length
+python eval/test_backends.py    # configurable backends (mock clients, no keys)
 python examples/run_proxy.py
+python examples/configure_backends.py
 ```
 
 ## Important caveats (don't skip)
 
-- **The local embedder is a bag-of-words hash, not real semantics.** Perfect
-  recall above is partly because the synthetic needle shares rare tokens with
-  the query. Real quality depends entirely on swapping in a real embedder +
-  picker. Re-run the harness after swapping to get a trustworthy number.
+- **The local *default* embedder is a bag-of-words hash, not real semantics.**
+  Perfect recall in the offline harness is partly because the synthetic needle
+  shares rare tokens with the query. Real quality depends on configuring a real
+  embedder + picker (now supported — see above). Re-run the harness against a
+  real backend to get a trustworthy number.
 - **Retrieval precision/recall is the whole ballgame.** A missed fetch is a
   *silent* quality loss. The scoped index (always listing relevant + decision
   turns) is the guard against the worst case.
