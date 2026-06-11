@@ -56,6 +56,31 @@ as conversations lengthen. That gap is the whole thesis.
 > shortlist + decision-flagged turns fixed it. The harness exists to catch
 > exactly this.
 
+## Results (LoCoMo benchmark, real conversations)
+
+[LoCoMo](https://github.com/snap-research/locomo) is a long-conversation QA benchmark with four question categories. Results below use real embeddings (`gemini-embedding-001`) and a real answerer/judge (`gemini-2.5-flash-lite`) across all 10 conversations (1,540 non-adversarial QA pairs).
+
+| mode | F1 | judge | ret_recall | note |
+|---|---|---|---|---|
+| `full` | 0.41 | 0.43 | — | all context, 0% savings |
+| `recency` | 0.00 | 0.01 | — | completely fails on long-term questions |
+| `jit` | 0.37 | 0.36 | 0.71 | ~50% token savings |
+
+**jit reaches 90% of full-context F1** while retrieving only the relevant turns. Recency fails entirely because the answer is almost never in the most recent turns — exactly the regime jit-context is designed for.
+
+Per-category breakdown (jit mode):
+
+| category | F1 | judge | ret_recall |
+|---|---|---|---|
+| single_hop | 0.48 | 0.51 | 0.74 |
+| multi_hop | 0.28 | 0.26 | 0.73 |
+| temporal | 0.22 | 0.10 | 0.69 |
+| open_domain | 0.13 | 0.20 | 0.43 |
+
+Open_domain is the weakest — those questions require diffuse, inferential context that is harder to surface by similarity search. Full numbers in `data/locomo_results.json`.
+
+> **Model caveat:** answerer and judge are `gemini-2.5-flash-lite` (small/fast). All three modes benefit equally from a stronger model, so the *relative gaps* are meaningful; absolute F1 will be higher with GPT-4o or Claude Sonnet.
+
 ## Offline by default, configurable real backends
 
 Everything runs with no network/keys via deterministic local components, so the
