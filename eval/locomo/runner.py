@@ -105,11 +105,13 @@ def aggregate(results: list[QAResult]) -> dict[str, CategoryStats]:
 
 
 def run_benchmark(path: str, modes=("full", "recency", "jit"),
-                  cfg_kwargs=None, limit=None, **backend):
+                  cfg_kwargs=None, limit=None, offset=0, **backend):
     cfg_kwargs = cfg_kwargs or dict(activation_turn_threshold=12,
                                     recent_turns_verbatim=4, shortlist_k=12,
                                     max_selected_turns=6)
     convs = load_conversations(path)
+    if offset:
+        convs = convs[offset:]
     if limit:
         convs = convs[:limit]
 

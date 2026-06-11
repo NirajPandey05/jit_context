@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "dataset": "snap-research/locomo (locomo10.json)",
+    "conversations": 10,
+    "qa_pairs_scored": 1540,
+    "adversarial_excluded": true,
+    "model_answerer": "models/gemini-2.5-flash-lite",
+    "model_judge": "models/gemini-2.5-flash-lite",
+    "embedder": "models/gemini-embedding-001",
+    "jit_config": {
+      "activation_turn_threshold": 12,
+      "recent_turns_verbatim": 4,
+      "shortlist_k": 12,
+      "max_selected_turns": 6
+    }
+  },
+  "results": {
+    "full": {
+      "single_hop":  {"n": 841,  "f1": 0.56, "judge": 0.63, "ret_recall": null},
+      "multi_hop":   {"n": 282,  "f1": 0.30, "judge": 0.28, "ret_recall": null},
+      "temporal":    {"n": 321,  "f1": 0.18, "judge": 0.11, "ret_recall": null},
+      "open_domain": {"n":  96,  "f1": 0.09, "judge": 0.14, "ret_recall": null},
+      "ALL":         {"n": 1540, "f1": 0.41, "judge": 0.43, "ret_recall": null}
+    },
+    "recency": {
+      "single_hop":  {"n": 841,  "f1": 0.00, "judge": 0.01, "ret_recall": null},
+      "multi_hop":   {"n": 282,  "f1": 0.00, "judge": 0.02, "ret_recall": null},
+      "temporal":    {"n": 321,  "f1": 0.00, "judge": 0.00, "ret_recall": null},
+      "open_domain": {"n":  96,  "f1": 0.01, "judge": 0.03, "ret_recall": null},
+      "ALL":         {"n": 1540, "f1": 0.00, "judge": 0.01, "ret_recall": null}
+    },
+    "jit": {
+      "single_hop":  {"n": 841,  "f1": 0.48, "judge": 0.51, "ret_recall": 0.74},
+      "multi_hop":   {"n": 282,  "f1": 0.28, "judge": 0.26, "ret_recall": 0.73},
+      "temporal":    {"n": 321,  "f1": 0.22, "judge": 0.10, "ret_recall": 0.69},
+      "open_domain": {"n":  96,  "f1": 0.13, "judge": 0.20, "ret_recall": 0.43},
+      "ALL":         {"n": 1540, "f1": 0.37, "judge": 0.36, "ret_recall": 0.71}
+    }
+  }
+}
