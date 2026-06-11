@@ -28,6 +28,8 @@ proxy = ProxyHandler(build_manager(JITConfig(mode="jit")), upstream=my_llm_call)
 response = proxy.handle(agent_messages)   # context rewritten transparently
 ```
 
+**→ [Full agent integration guide](docs/agent_integration.md)** — Claude Code, GitHub Copilot, OpenAI-compatible agents, embedding in application code, configuration reference.
+
 ## Three modes (same pipeline, different config)
 
 - `full`    — pass everything (control; complete but diluted, 0% savings)
@@ -80,6 +82,8 @@ Per-category breakdown (jit mode):
 Open_domain is the weakest — those questions require diffuse, inferential context that is harder to surface by similarity search. Full numbers in `data/locomo_results.json`.
 
 > **Model caveat:** answerer and judge are `gemini-2.5-flash-lite` (small/fast). All three modes benefit equally from a stronger model, so the *relative gaps* are meaningful; absolute F1 will be higher with GPT-4o or Claude Sonnet.
+
+**→ [Full benchmark comparison](docs/benchmark_comparison.md)** — per-category breakdown, comparison against RAG baselines and persistent memory systems, reproduction instructions.
 
 ## Offline by default, configurable real backends
 
