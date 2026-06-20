@@ -1,5 +1,5 @@
 # jit-context
-
+📖 **Read the writeup:** [Load late, load little — JIT context for conversation history](https://nirajpandey05.github.io/jit_context/)
 Just-in-time context management for LLM agents. Keep a compact, navigable
 **index** of the conversation hot; fetch full turn detail **lazily** only when a
 turn is actually needed. The goal is twofold: lower token cost, and *higher
