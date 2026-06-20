@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Just-in-Time Context for Conversation History</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FAFAFB;
+    --paper-2:#F2F2F5;
+    --ink:#16161A;
+    --ink-soft:#3C3C44;
+    --muted:#75757F;
+    --line:#E2E2E8;
+    --hot:#E08A2B;        /* in-context, "hot" */
+    --hot-soft:#F6E2C4;
+    --hot-deep:#B5670F;
+    --cold:#3E5C8A;       /* stored, "cold" */
+    --cold-soft:#D9E1EE;
+    --cold-deep:#27406A;
+    --good:#2F7A57;
+    --bad:#B23A3A;
+    --maxw:760px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Newsreader",Georgia,serif;
+    font-size:20px;line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  .display{font-family:"Space Grotesk",system-ui,sans-serif}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+
+  /* ---- masthead ---- */
+  header.masthead{padding:72px 0 28px;border-bottom:1px solid var(--line)}
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace;font-size:12.5px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--hot-deep);font-weight:600;margin:0 0 22px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .eyebrow .dot{width:8px;height:8px;border-radius:50%;background:var(--hot);box-shadow:0 0 0 4px var(--hot-soft)}
+  h1.title{
+    font-family:"Space Grotesk",sans-serif;font-weight:700;
+    font-size:clamp(34px,6.2vw,58px);line-height:1.04;letter-spacing:-.02em;
+    margin:0 0 22px;color:var(--ink);
+  }
+  .dek{font-size:22px;line-height:1.5;color:var(--ink-soft);margin:0 0 30px;max-width:38em}
+  .byline{
+    font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;
+  }
+  .byline strong{color:var(--ink-soft);font-weight:600}
+
+  /* ---- body ---- */
+  article{padding:8px 0 40px}
+  article h2{
+    font-family:"Space Grotesk",sans-serif;font-weight:600;
+    font-size:clamp(25px,4vw,32px);line-height:1.12;letter-spacing:-.015em;
+    margin:64px 0 6px;
+  }
+  article h2 .num{
+    font-family:"IBM Plex Mono",monospace;font-size:14px;color:var(--hot-deep);
+    font-weight:600;display:block;margin-bottom:10px;letter-spacing:.05em;
+  }
+  article h3{
+    font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:21px;
+    margin:38px 0 4px;letter-spacing:-.01em;
+  }
+  article p{margin:18px 0}
+  article a{color:var(--cold-deep);text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px}
+  strong{font-weight:600;color:var(--ink)}
+  em{font-style:italic}
+  .lead{font-size:22px;line-height:1.55;color:var(--ink-soft)}
+  .lead::first-letter{
+    font-family:"Space Grotesk",sans-serif;font-weight:700;
+    font-size:4.2em;line-height:.78;float:left;margin:6px 12px 0 0;color:var(--hot-deep);
+  }
+
+  /* term highlight */
+  .hot-t{color:var(--hot-deep);font-weight:500}
+  .cold-t{color:var(--cold-deep);font-weight:500}
+
+  /* figure */
+  figure{margin:40px 0;}
+  figure svg{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+  figcaption{
+    font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--muted);
+    margin-top:12px;line-height:1.5;padding-left:14px;border-left:2px solid var(--hot-soft);
+  }
+  figcaption b{color:var(--ink-soft);font-weight:600}
+
+  /* pull / callout */
+  .callout{
+    margin:36px 0;padding:22px 24px;background:var(--paper-2);
+    border-radius:10px;border-left:3px solid var(--cold);
+    font-size:18px;line-height:1.55;color:var(--ink-soft);
+  }
+  .callout.warn{border-left-color:var(--hot)}
+  .callout .tag{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px;font-weight:600;
+  }
+
+  /* code */
+  pre{
+    background:#1A1B20;color:#E7E7EA;border-radius:10px;padding:20px 22px;overflow-x:auto;
+    font-family:"IBM Plex Mono",monospace;font-size:13.5px;line-height:1.65;margin:28px 0;
+  }
+  pre .c{color:#8A8D98}
+  pre .k{color:#E0A85C}
+  pre .s{color:#9DC08B}
+  pre .h{color:#E08A2B;font-weight:600}
+  code.inl{
+    font-family:"IBM Plex Mono",monospace;font-size:.82em;background:var(--paper-2);
+    padding:1px 6px;border-radius:5px;color:var(--cold-deep);
+  }
+
+  /* table */
+  .tbl{width:100%;border-collapse:collapse;margin:30px 0;font-family:"IBM Plex Mono",monospace;font-size:13.5px}
+  .tbl th,.tbl td{padding:11px 12px;text-align:left;border-bottom:1px solid var(--line)}
+  .tbl th{font-weight:600;color:var(--muted);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;border-bottom:1.5px solid var(--ink-soft)}
+  .tbl td.num{text-align:right}
+  .tbl tr.hl td{background:var(--hot-soft)}
+  .tbl tr.dim td{color:var(--muted)}
+  .chip{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600}
+  .chip.hot{background:var(--hot-soft);color:var(--hot-deep)}
+  .chip.cold{background:var(--cold-soft);color:var(--cold-deep)}
+
+  hr.div{border:0;border-top:1px solid var(--line);margin:60px 0}
+  .endmark{text-align:center;color:var(--hot);font-size:24px;margin:50px 0 10px}
+
+  footer{border-top:1px solid var(--line);padding:34px 0 80px;color:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.7}
+  footer a{color:var(--cold-deep)}
+
+  @media (max-width:560px){
+    body{font-size:18px}
+    .lead::first-letter{font-size:3.4em}
+    figcaption{font-size:11.5px}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .reveal{opacity:0;transform:translateY(10px);animation:rise .7s ease forwards}
+    @keyframes rise{to{opacity:1;transform:none}}
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="eyebrow"><span class="dot"></span>Context engineering · Field note</p>
+    <h1 class="title">Load late, load little:<br>just-in-time context for conversation history</h1>
+    <p class="dek">Most agents drag their entire past into every turn. A better default: keep a thin index of what was said hot, and fetch only the few turns you actually need — intact, on demand.</p>
+    <div class="byline">
+      <span><strong>A build log &amp; reference</strong></span>
+      <span>·</span>
+      <span>~12 min read</span>
+      <span>·</span>
+      <span>repo: <a href="https://github.com/NirajPandey05/jit_context" style="color:var(--cold-deep)">github.com/NirajPandey05/jit_context</a></span>
+    </div>
+  </div>
+</header>
+
+<article>
+<div class="wrap">
+
+  <p class="lead">There is a quiet assumption baked into how most agents handle memory: that more context is safer than less. If the model might need something, put it in the window. The conversation grows, every prior turn rides along on every new request, and we trust the model to find the part that matters.</p>
+
+  <p>That assumption breaks twice. It breaks on <strong>cost</strong>, because an agent loop re-sends its whole window on every step — a hundred stale turns aren't paid for once, they're paid for on turn 101, 102, and every step after. And it breaks on <strong>quality</strong>, because models don't read a long window evenly. Relevant facts buried in the middle get underweighted; irrelevant bulk competes for attention with the thing that actually answers the question. Past a point, a bigger context produces a <em>worse</em> answer, not just a costlier one.</p>
+
+  <p>So the interesting question isn't "how do we fit more in?" It's "how do we keep the window small and dense without losing the one old turn that matters?" This post is the design we built around that question — for the specific case of long <strong>conversation history</strong> — plus the benchmark we used to keep ourselves honest.</p>
+
+  <!-- FIG 1 : the inversion -->
+  <figure class="reveal">
+    <svg viewBox="0 0 760 300" role="img" aria-label="Comparison of full context versus just-in-time context">
+      <defs>
+        <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#F2B65E"/><stop offset="1" stop-color="#E08A2B"/>
+        </linearGradient>
+      </defs>
+      <!-- left: full context -->
+      <text x="40" y="40" class="mono" font-size="13" font-weight="600" fill="#75757F">FULL CONTEXT</text>
+      <text x="40" y="58" font-family="IBM Plex Mono" font-size="11" fill="#B23A3A">everything hot · diluted · billed every step</text>
+      <g>
+        <!-- many hot-ish (but faded = noise) turns -->
+        <!-- generate 12 bars -->
+        <rect x="40" y="78" width="300" height="14" rx="3" fill="#F6E2C4"/>
+        <rect x="40" y="96" width="300" height="14" rx="3" fill="#F6E2C4"/>
+        <rect x="40" y="114" width="300" height="14" rx="3" fill="url(#hg)"/>
+        <rect x="40" y="132" width="300" height="14" rx="3" fill="#F6E2C4"/>
+        <rect x="40" y="150" width="300" height="14" rx="3" fill="#F6E2C4"/>
+        <rect x="40" y="168" width="300" height="14" rx="3" fill="#F6E2C4"/>
+        <rect x="40" y="186" width="300" height="14" rx="3" fill="#F6E2C4"/>
+        <rect x="40" y="204" width="300" height="14" rx="3" fill="#F6E2C4"/>
+        <rect x="40" y="222" width="300" height="14" rx="3" fill="#F6E2C4"/>
+        <rect x="40" y="240" width="300" height="14" rx="3" fill="#F6E2C4"/>
+        <text x="346" y="125" font-family="IBM Plex Mono" font-size="10.5" fill="#B5670F">← the one</text>
+        <text x="346" y="137" font-family="IBM Plex Mono" font-size="10.5" fill="#B5670F">&nbsp;&nbsp;&nbsp;needed turn</text>
+        <text x="40" y="276" font-family="IBM Plex Mono" font-size="11" fill="#75757F">tokens: ████████████ 100%</text>
+      </g>
+      <!-- divider -->
+      <line x1="400" y1="70" x2="400" y2="262" stroke="#E2E2E8"/>
+      <!-- right: JIT -->
+      <text x="430" y="40" class="mono" font-size="13" font-weight="600" fill="#75757F">JIT CONTEXT</text>
+      <text x="430" y="58" font-family="IBM Plex Mono" font-size="11" fill="#2F7A57">thin index + only what's needed</text>
+      <!-- index strip -->
+      <rect x="430" y="78" width="290" height="22" rx="4" fill="#D9E1EE" stroke="#3E5C8A" stroke-dasharray="3 3"/>
+      <text x="438" y="93" font-family="IBM Plex Mono" font-size="10.5" fill="#27406A">index · #1…#40 (one line each)</text>
+      <!-- recent verbatim -->
+      <rect x="430" y="112" width="290" height="14" rx="3" fill="url(#hg)"/>
+      <text x="726" y="123" font-family="IBM Plex Mono" font-size="9.5" fill="#B5670F" text-anchor="end"></text>
+      <!-- retrieved -->
+      <rect x="430" y="130" width="290" height="14" rx="3" fill="url(#hg)"/>
+      <rect x="430" y="148" width="290" height="14" rx="3" fill="url(#hg)"/>
+      <text x="430" y="182" font-family="IBM Plex Mono" font-size="10.5" fill="#B5670F">↑ retrieved: the needed turn, intact</text>
+      <text x="430" y="200" font-family="IBM Plex Mono" font-size="10.5" fill="#75757F">the other 36 turns stay in cold store,</text>
+      <text x="430" y="214" font-family="IBM Plex Mono" font-size="10.5" fill="#75757F">fetchable by #id if a later turn needs them</text>
+      <text x="430" y="276" font-family="IBM Plex Mono" font-size="11" fill="#75757F">tokens: ████ ~40%</text>
+    </svg>
+    <figcaption><b>The inversion.</b> Full context keeps every turn resident, so the signal (one turn) is diluted by noise (the rest) and the whole thing is re-billed each step. JIT keeps a compact <span class="cold-t">index</span> always visible and pulls only the <span class="hot-t">few relevant turns</span> back to full heat.</figcaption>
+  </figure>
+
+  <h2><span class="num">01 / the mechanism</span>A hot index over a cold store</h2>
+
+  <p>The design borrows directly from how computers have always managed memory that doesn't fit: a small fast tier that's always present, a large slow tier that holds the bulk, and a rule for moving things between them. Virtual memory pages between RAM and disk. We page between the context window and an external store — for <em>attention</em> instead of address space.</p>
+
+  <p>Concretely there are two tiers. The <span class="cold-t">cold store</span> holds every turn at full fidelity, keyed by id — nothing is thrown away. The <span class="hot-t">hot index</span> holds one compact entry per turn: a short summary, a little metadata (entities, whether the turn recorded a decision), and an embedding of that summary. The index is cheap enough to keep in the window permanently; the payloads are not.</p>
+
+  <p>That permanence matters more than it looks. Because the index — a table of contents — is always present, the model can always <em>see that something exists</em> even when it hasn't loaded the detail. "There was a decision about the deploy window at turn 14" stays visible as a one-liner. The worst failure mode of any retrieval system is silently dropping a relevant fact so the model never knows to ask for it. An always-on index is the guard against that.</p>
+
+  <figure class="reveal">
+    <svg viewBox="0 0 760 340" role="img" aria-label="The hot index and cold store memory hierarchy">
+      <!-- hot tier -->
+      <rect x="40" y="30" width="680" height="92" rx="10" fill="#FBF3E6" stroke="#E08A2B"/>
+      <text x="58" y="56" class="mono" font-size="12" font-weight="600" fill="#B5670F">HOT · IN THE CONTEXT WINDOW</text>
+      <!-- index lines -->
+      <g font-family="IBM Plex Mono" font-size="11" fill="#7a5a2a">
+        <rect x="58" y="66" width="644" height="16" rx="3" fill="#fff" stroke="#F0D6A8"/>
+        <text x="66" y="78">#12  user      [decision]  "lock deploy window to Tuesday 02:00 UTC"  (Deploy, UTC)</text>
+        <rect x="58" y="86" width="644" height="16" rx="3" fill="#fff" stroke="#F0D6A8"/>
+        <text x="66" y="98">#13  assistant            "confirmed; updating the runbook"          (Runbook)</text>
+        <rect x="58" y="104" width="644" height="12" rx="3" fill="#F6E2C4"/>
+        <text x="66" y="113" font-size="9" fill="#B5670F">…one line per turn — the table of contents the model always sees…</text>
+      </g>
+      <!-- arrows -->
+      <g stroke="#3E5C8A" stroke-width="1.6" fill="none">
+        <path d="M 250 122 L 250 168" marker-end="url(#ar)"/>
+        <path d="M 510 168 L 510 122" marker-end="url(#ar)"/>
+      </g>
+      <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#3E5C8A"/></marker></defs>
+      <text x="196" y="150" font-family="IBM Plex Mono" font-size="10.5" fill="#3E5C8A" text-anchor="end">summarize +</text>
+      <text x="196" y="162" font-family="IBM Plex Mono" font-size="10.5" fill="#3E5C8A" text-anchor="end">embed (async)</text>
+      <text x="556" y="150" font-family="IBM Plex Mono" font-size="10.5" fill="#3E5C8A">lazy fetch</text>
+      <text x="556" y="162" font-family="IBM Plex Mono" font-size="10.5" fill="#3E5C8A">by #id</text>
+      <!-- cold tier -->
+      <rect x="40" y="176" width="680" height="132" rx="10" fill="#EEF2F8" stroke="#3E5C8A"/>
+      <text x="58" y="202" class="mono" font-size="12" font-weight="600" fill="#27406A">COLD · EXTERNAL STORE (full turns, keyed by id)</text>
+      <g font-family="IBM Plex Mono" font-size="10.5" fill="#3a4f73">
+        <rect x="58" y="214" width="150" height="80" rx="5" fill="#fff" stroke="#CBD7E8"/>
+        <text x="68" y="232">#12 ▸ full text</text>
+        <text x="68" y="250" fill="#8aa">(2.1k tokens)</text>
+        <rect x="220" y="214" width="150" height="80" rx="5" fill="#fff" stroke="#CBD7E8"/>
+        <text x="230" y="232">#13 ▸ full text</text>
+        <text x="230" y="250" fill="#8aa">(0.9k tokens)</text>
+        <rect x="382" y="214" width="150" height="80" rx="5" fill="#fff" stroke="#CBD7E8"/>
+        <text x="392" y="232">#14 ▸ full text</text>
+        <text x="392" y="250" fill="#8aa">(1.4k tokens)</text>
+        <rect x="544" y="214" width="158" height="80" rx="5" fill="#fff" stroke="#CBD7E8"/>
+        <text x="554" y="232">… #40</text>
+        <text x="554" y="250" fill="#8aa">(the long tail)</text>
+      </g>
+    </svg>
+    <figcaption><b>Two tiers, one rule.</b> Turns are summarized and embedded into the <span class="hot-t">hot index</span> after each response (off the critical path, so it never blocks a reply). The full text lives in the <span class="cold-t">cold store</span> and is pulled back only when retrieval says a specific turn is needed.</figcaption>
+  </figure>
+
+  <h2><span class="num">02 / retrieval</span>Shortlist by similarity, then let a model pick</h2>
+
+  <p>When a new turn arrives and the conversation is long enough to bother, we have to decide which old turns to reheat. We do it in two stages — cheap-and-broad, then precise-and-narrow.</p>
+
+  <p>First, a <strong>semantic shortlist</strong>: embed the current request, rank every index entry by similarity, take the top dozen. This is fast, recall-oriented, and costs no model call. Second, a <strong>model picks</strong>: a small, fast model sees the request and those dozen candidate <em>summaries</em> — never the full text — and returns the handful of turn ids whose full detail is actually worth loading. Similarity finds plausible candidates; the picker applies judgment the embeddings can't.</p>
+
+  <figure class="reveal">
+    <svg viewBox="0 0 760 220" role="img" aria-label="The hybrid retrieval pipeline">
+      <g font-family="Space Grotesk" font-size="13" font-weight="600">
+        <!-- stage boxes -->
+        <rect x="24" y="74" width="120" height="64" rx="9" fill="#fff" stroke="#E2E2E8"/>
+        <text x="84" y="100" text-anchor="middle" fill="#16161A">new turn</text>
+        <text x="84" y="118" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#75757F">the query</text>
+
+        <rect x="184" y="74" width="148" height="64" rx="9" fill="#EEF2F8" stroke="#3E5C8A"/>
+        <text x="258" y="98" text-anchor="middle" fill="#27406A">semantic</text>
+        <text x="258" y="115" text-anchor="middle" fill="#27406A">shortlist</text>
+        <text x="258" y="131" text-anchor="middle" font-family="IBM Plex Mono" font-size="9.5" fill="#3E5C8A">top-12 by cosine</text>
+
+        <rect x="372" y="74" width="148" height="64" rx="9" fill="#FBF3E6" stroke="#E08A2B"/>
+        <text x="446" y="98" text-anchor="middle" fill="#B5670F">model picks</text>
+        <text x="446" y="115" text-anchor="middle" font-family="IBM Plex Mono" font-size="9.5" fill="#B5670F">summaries only →</text>
+        <text x="446" y="129" text-anchor="middle" font-family="IBM Plex Mono" font-size="9.5" fill="#B5670F">[ #12, #14 ]</text>
+
+        <rect x="560" y="74" width="176" height="64" rx="9" fill="#fff" stroke="#E2E2E8"/>
+        <text x="648" y="98" text-anchor="middle" fill="#16161A">assemble window</text>
+        <text x="648" y="115" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#75757F">index + picked turns</text>
+        <text x="648" y="129" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#75757F">+ recent N verbatim</text>
+      </g>
+      <g stroke="#16161A" stroke-width="1.5" fill="none">
+        <path d="M 144 106 L 180 106" marker-end="url(#ar2)"/>
+        <path d="M 332 106 L 368 106" marker-end="url(#ar2)"/>
+        <path d="M 520 106 L 556 106" marker-end="url(#ar2)"/>
+      </g>
+      <defs><marker id="ar2" markerWidth="9" markerHeight="9" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#16161A"/></marker></defs>
+      <text x="380" y="180" font-family="IBM Plex Mono" font-size="11" fill="#75757F">cheap &amp; broad ───────────────▶ precise &amp; narrow</text>
+    </svg>
+    <figcaption><b>Hybrid retrieval.</b> The shortlist keeps recall high without a model call; the picker raises precision on a short list. Feeding the picker <span class="cold-t">summaries, not full turns</span> keeps that sub-call small and fast.</figcaption>
+  </figure>
+
+  <p>The window we finally send is assembled from three parts: the system prompt, the scoped index (relevant + decision-flagged lines, so the table of contents doesn't itself grow without bound), the handful of retrieved turns at full fidelity, and the most recent few turns kept verbatim — because recency is free and usually relevant, so there's no reason to make the retriever re-derive it.</p>
+
+  <h2><span class="num">03 / a worked example</span>The needle at turn 9</h2>
+
+  <p>Make it concrete. A sixty-turn conversation; back at turn 9 the assistant said <em>"Decision: the deploy window is Tuesday 02:00 UTC. Let's lock that in."</em> Fifty turns of unrelated chatter follow. Now the user asks: <em>"Remind me, what did we settle on for the deploy window?"</em></p>
+
+  <p>A naive recency window keeps the last four turns — all chatter — and the answer is simply gone. Full context keeps everything, answer included, but pays for sixty turns and dilutes the needle among them. Here's what JIT does instead:</p>
+
+  <pre><span class="c"># the request comes in; conversation is over threshold → JIT engages</span>
+query  = "what did we settle on for the deploy window?"
+
+<span class="c"># 1 · semantic shortlist over the index (summaries only)</span>
+shortlist = top_k(embed(query), index, k=12)
+<span class="c">#   → #9 ranks high: its summary shares "deploy / window / settle"</span>
+
+<span class="c"># 2 · model picks from the shortlist's summaries</span>
+picked = picker(query, shortlist, max=6)   <span class="c"># → [9]</span>
+
+<span class="c"># 3 · assemble: system + scoped index + full #9 + recent 4 + query</span>
+window = assemble(system, index, fetch([9]), recent_4, query)
+
+<span class="h">input turns: 61  →  sent turns: 11   ·   tokens 1066 → 360  (66% saved)</span></pre>
+
+  <p>The needle is retrieved intact, the answer is exact, and the window is a third of the size. The point isn't the percentage — it's that JIT beat <em>both</em> baselines at once: more accurate than recency (which lost the turn) and far cheaper than full (which kept all sixty).</p>
+
+  <h2><span class="num">04 / the honest part</span>Three-way comparison, including the result that didn't work</h2>
+
+  <p>The comparison that matters is never "JIT vs. the giant window." It's three-way, because each baseline fails differently:</p>
+
+  <table class="tbl">
+    <thead><tr><th>approach</th><th>accuracy</th><th>tokens</th><th>the catch</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip cold">full</span> everything</td><td>high</td><td class="num">100%</td><td>complete but diluted; billed every step</td></tr>
+      <tr><td><span class="chip cold">recency</span> last N turns</td><td class="num" style="color:var(--bad)">~0%</td><td class="num">~10%</td><td>drops anything old, however important</td></tr>
+      <tr class="hl"><td><span class="chip hot">jit</span> index + fetch</td><td>high</td><td class="num">~40–50%</td><td>only as good as retrieval recall</td></tr>
+    </tbody>
+  </table>
+
+  <p>That last catch is the whole game, and it cuts both ways. When retrieval is good, JIT gives you a small dense window — cheaper <em>and</em> higher quality. When retrieval misses, JIT has now <em>removed</em> a turn that the full window would at least have kept somewhere. So JIT only wins when retrieval precision clears a bar; below it, you've built a slow leak.</p>
+
+  <div class="callout warn">
+    <span class="tag">A negative result, kept on the record</span>
+    Our first version injected the <em>entire</em> index on every turn. On long conversations that table of contents grew so large it cost more than the turns it was saving — token "savings" went <strong>negative</strong>, and got worse the longer the chat. The fix was to scope the injected index to the shortlist plus decision-flagged turns. Only after that did savings turn positive and grow with length. The benchmark existed precisely to catch this; an eval that only ever shows wins isn't measuring anything.
+  </div>
+
+  <figure class="reveal">
+    <svg viewBox="0 0 760 300" role="img" aria-label="Token savings grow with conversation length after scoping the index">
+      <!-- axes -->
+      <line x1="70" y1="40" x2="70" y2="240" stroke="#C9C9D2"/>
+      <line x1="70" y1="240" x2="710" y2="240" stroke="#C9C9D2"/>
+      <text x="70" y="24" font-family="Space Grotesk" font-size="13" font-weight="600" fill="#16161A">Token savings vs. conversation length</text>
+      <!-- y labels -->
+      <g font-family="IBM Plex Mono" font-size="10" fill="#75757F">
+        <text x="62" y="244" text-anchor="end">0%</text>
+        <text x="62" y="194" text-anchor="end">25%</text>
+        <text x="62" y="144" text-anchor="end">50%</text>
+        <text x="62" y="94" text-anchor="end">75%</text>
+        <text x="62" y="48" text-anchor="end">100%</text>
+      </g>
+      <!-- x labels -->
+      <g font-family="IBM Plex Mono" font-size="10" fill="#75757F" text-anchor="middle">
+        <text x="150" y="258">20</text><text x="270" y="258">40</text><text x="390" y="258">80</text>
+        <text x="510" y="258">160</text><text x="630" y="258">320</text>
+        <text x="390" y="278" fill="#9a9aa4">turns in conversation →</text>
+      </g>
+      <!-- gridlines -->
+      <g stroke="#EFEFF3"><line x1="70" y1="194" x2="710" y2="194"/><line x1="70" y1="144" x2="710" y2="144"/><line x1="70" y1="94" x2="710" y2="94"/></g>
+      <!-- scoped index line (real numbers: 3.2,50.3,74.4,87.4,93.7) -->
+      <polyline fill="none" stroke="#E08A2B" stroke-width="2.5"
+        points="150,234 270,139 390,91 510,65 630,53"/>
+      <g fill="#E08A2B">
+        <circle cx="150" cy="234" r="4"/><circle cx="270" cy="139" r="4"/><circle cx="390" cy="91" r="4"/><circle cx="510" cy="65" r="4"/><circle cx="630" cy="53" r="4"/>
+      </g>
+      <text x="638" y="48" font-family="IBM Plex Mono" font-size="10.5" fill="#B5670F">94% scoped index</text>
+      <!-- full index (negative-ish) line for contrast: -30,-35,-38,-40,-41 -> below zero -->
+      <polyline fill="none" stroke="#B23A3A" stroke-width="2" stroke-dasharray="5 4"
+        points="150,294 270,310 390,316 510,320 630,322"/>
+      <text x="160" y="290" font-family="IBM Plex Mono" font-size="10.5" fill="#B23A3A">full index (negative — clipped)</text>
+    </svg>
+    <figcaption><b>Why scoping mattered.</b> With the full index injected every turn (<span style="color:var(--bad)">red, dashed</span>) savings were negative and worsened with length. Scoping the index to relevant + important lines (<span class="hot-t">amber</span>) flips it: savings climb from break-even at 20 turns to ~94% at 320. Numbers are from our offline harness.</figcaption>
+  </figure>
+
+  <h2><span class="num">05 / proving it properly</span>The LoCoMo benchmark</h2>
+
+  <p>Self-measured wins on a synthetic generator are a smell test, not proof. To make a claim anyone should believe, you have to run on a public benchmark other systems also report on. For long-term conversational memory, that benchmark is <strong>LoCoMo</strong> (Maharana et al., presented at ACL 2024, released by snap-research).</p>
+
+  <p>LoCoMo is built for exactly the regime JIT targets: very long, multi-session conversations where the answer to a question is some specific thing said far earlier, buried in noise. Its scale is the point — the dataset is ten long conversations averaging on the order of <strong>~600 turns and ~26 sessions each</strong>, with roughly <strong>~1,500 question–answer pairs</strong> annotated across the set. A short-context trick won't survive it.</p>
+
+  <p>What makes it a genuinely useful diagnostic — rather than a single score — is that its questions come in distinct types, and they stress a retrieval-based design very differently:</p>
+
+  <table class="tbl">
+    <thead><tr><th>question type</th><th>what it asks</th><th>stresses…</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip cold">single-hop</span></td><td>one fact from one turn</td><td>pure retrieval — the JIT sweet spot</td></tr>
+      <tr><td><span class="chip cold">multi-hop</span></td><td>join facts across disjoint turns</td><td>pulling <em>several</em> related turns, not just the top one</td></tr>
+      <tr><td><span class="chip cold">temporal</span></td><td>ordering &amp; timelines</td><td>whether the index kept timestamps</td></tr>
+      <tr><td><span class="chip cold">open-domain</span></td><td>inference beyond the stated text</td><td>reasoning, not just recall</td></tr>
+      <tr class="dim"><td><span class="chip cold">adversarial</span></td><td>unanswerable / trap</td><td>excluded from scoring by convention</td></tr>
+    </tbody>
+  </table>
+
+  <p>Following the standard protocol, the adversarial category is excluded so results stay comparable to published numbers. The run itself mirrors the architecture: a <strong>write phase</strong> ingests the whole conversation into the index and cold store, then a <strong>read phase</strong> answers each question by assembling a window and handing it to a real model. Two scorers are reported together for defensibility — word-overlap <span class="mono" style="font-size:.8em">F1</span> against the reference, and an LLM-as-judge for semantic correctness — and crucially, accuracy is broken out <em>per category</em>.</p>
+
+  <div class="callout">
+    <span class="tag">Why the per-category breakdown earns trust</span>
+    A single aggregate number hides the story. The honest pattern a retrieval-first design shows on LoCoMo is strong single-hop, weaker temporal — and the breakdown tells you <em>why</em>: temporal questions can have perfect evidence recall (you fetched the right turns) yet still miss, because answering needs ordering the summaries may have stripped. That cleanly separates the two failure modes worth distinguishing — <em>didn't retrieve it</em> versus <em>retrieved it but couldn't use it</em> — and points straight at the fix (timestamp-aware indexing) instead of a vague "improve retrieval."
+  </div>
+
+  <h3>The actual numbers</h3>
+
+  <p>Run across all ten conversations (1,540 non-adversarial QA pairs) with real embeddings (<span class="mono" style="font-size:.8em">gemini-embedding-001</span>) and a real answerer/judge (<span class="mono" style="font-size:.8em">gemini-2.5-flash-lite</span>):</p>
+
+  <table class="tbl">
+    <thead><tr><th>mode</th><th class="num">F1</th><th class="num">judge</th><th class="num">ret. recall</th><th class="num">token cost</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip cold">full</span></td><td class="num">0.41</td><td class="num">0.43</td><td class="num">—</td><td class="num">100%</td></tr>
+      <tr class="dim"><td><span class="chip cold">recency</span></td><td class="num">0.00</td><td class="num">0.01</td><td class="num">—</td><td class="num">~10%</td></tr>
+      <tr class="hl"><td><span class="chip hot">jit</span></td><td class="num">0.37</td><td class="num">0.36</td><td class="num">0.71</td><td class="num">~50%</td></tr>
+    </tbody>
+  </table>
+
+  <p>The shape is the thesis made real: <strong>JIT reaches about 90% of full-context F1 at roughly half the tokens</strong>, while recency collapses to near-zero because the answer is almost never in the most recent turns. That gap between JIT and recency — same token budget order, wildly different accuracy — is the entire argument for indexing over truncation.</p>
+
+  <p>One caution on reading these: the absolute scores are low because the answerer/judge is a small fast model; full-context F1 is only 0.41. All three modes would rise with a stronger model, so the trustworthy signal is the <em>relative</em> gap (JIT ≈ full, recency ≈ 0), not the 90% ratio in isolation — a ratio of two small numbers is noisy. Lead with the structure, not the percentage.</p>
+
+  <p>And the per-category breakdown delivers exactly the diagnostic promised above:</p>
+
+  <table class="tbl">
+    <thead><tr><th>category (jit)</th><th class="num">F1</th><th class="num">judge</th><th class="num">ret. recall</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip cold">single-hop</span></td><td class="num">0.48</td><td class="num">0.51</td><td class="num">0.74</td></tr>
+      <tr><td><span class="chip cold">multi-hop</span></td><td class="num">0.28</td><td class="num">0.26</td><td class="num">0.73</td></tr>
+      <tr><td><span class="chip cold">temporal</span></td><td class="num">0.22</td><td class="num">0.10</td><td class="num">0.69</td></tr>
+      <tr><td><span class="chip cold">open-domain</span></td><td class="num">0.13</td><td class="num">0.20</td><td class="num">0.43</td></tr>
+    </tbody>
+  </table>
+
+  <p>Single-hop is strongest — pure retrieval, the design's home ground. Temporal is the tell: retrieval recall is a healthy 0.69 (the right turns <em>were</em> fetched), yet judge accuracy is just 0.10 — evidence present, but ordering the summaries stripped. Open-domain is weakest on both axes, because diffuse inferential context is genuinely hard to surface by similarity. None of this is hidden; it's the map of what to fix next.</p>
+
+  <p>The rule held throughout: only place another system's figure beside these if it ran through the identical harness; otherwise it's "reported, not directly comparable." Different judge models and answer-matching make cross-paper numbers a trap.</p>
+
+  <h2><span class="num">06 / where this sits</span>One slice of a bigger pattern</h2>
+
+  <p>"Just-in-time context" as a phrase isn't ours — it traces to Anthropic's 2025 context-engineering guidance, which argued for keeping lightweight identifiers in the window and resolving them to full content at runtime. That broader pattern shows up in several places: skills loaded on activation, large tool results offloaded to handles, sub-agents that take a heavy subtask out of the parent's window.</p>
+
+  <p>Most of those are <em>forward-looking</em> — the agent decides what to load as it works. The slice described here is <em>retrospective</em>: indexing the conversation's own past and pulling old turns back when they become relevant. And where the common shortcut for long history is compaction — summarize the transcript and discard the detail — the bet here is the opposite: <strong>keep every turn intact in cold storage and fetch it whole</strong>, so nothing is lost to a lossy summary made before anyone knew which detail would matter. Selection, not compression; conversation history, not all content. That's the corner of the map this occupies.</p>
+
+  <h2><span class="num">07 / the parts that are still hard</span>Caveats worth stating plainly</h2>
+
+  <p><strong>Retrieval precision is the whole ballgame.</strong> A missed fetch is a silent quality loss the model often can't detect. The always-on index mitigates the worst case but doesn't erase it.</p>
+
+  <p><strong>Summarizing at index time is lossy and early.</strong> You compress a turn before you know what future question will be asked of it — a real circular dependency. Keeping the full turn fetchable is the hedge, but the index summary still gates whether you ever go fetch it.</p>
+
+  <p><strong>Every lazy fetch and picker call is latency.</strong> Push indexing off the response path, keep the picker on a small model, cap the shortlist — and measure whether the sub-call's cost eats the savings it's chasing.</p>
+
+  <p><strong>Dynamic windows fight prompt caches.</strong> A context that changes every turn invalidates a provider's cached prefix. Keep the stable parts first and the freshly retrieved parts last to preserve what cache you can.</p>
+
+  <p>None of these sink the idea. They define where it pays off: long-horizon, low-locality conversations, past a length threshold, where the relevant past is neither recent nor predictable. In that regime — and the benchmark exists to tell you whether you're in it — loading late and loading little is simply the better default.</p>
+
+  <div class="callout">
+    <span class="tag">The code</span>
+    The implementation — the proxy, the hybrid retriever, and the LoCoMo harness described here — lives at <a href="https://github.com/NirajPandey05/jit_context"><strong>github.com/NirajPandey05/jit_context</strong></a>. It runs offline with no keys for a quick look, and takes real embedder / picker / answerer backends when you want comparable numbers.
+  </div>
+
+  <div class="endmark">◆</div>
+
+</div>
+</article>
+
+<footer>
+  <div class="wrap">
+    <p><strong>Notes &amp; provenance.</strong> Diagrams are schematic. The token-savings-vs-length figures come from an offline synthetic harness (a smoke test built to be winnable). The headline accuracy table is a <em>real</em> LoCoMo run — all ten conversations, 1,540 non-adversarial QA pairs, real embeddings (<span class="mono" style="font-size:.85em">gemini-embedding-001</span>) and a real answerer/judge (<span class="mono" style="font-size:.85em">gemini-2.5-flash-lite</span>); absolute F1 is bounded by that small model, so the relative gaps are the signal. LoCoMo: Maharana et&nbsp;al., "Evaluating Very Long-Term Conversational Memory of LLM Agents," ACL 2024 (snap-research). "Just-in-time context" as a named pattern follows Anthropic's 2025 context-engineering guidance. Comparisons to other memory systems are only valid when run through an identical harness.</p>
+    <p style="margin-top:18px;color:#9a9aa4">A build log — written to be a reference, not a launch. Code: <a href="https://github.com/NirajPandey05/jit_context">github.com/NirajPandey05/jit_context</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
